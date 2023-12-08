@@ -7,12 +7,11 @@ from utilities import timeSince, showPlot
 EOS_token = 1
 
 def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
-          decoder_optimizer, criterion):
+          decoder_optimizer, criterion, device):
 
     total_loss = 0
     for data in dataloader:
-        input_tensor, target_tensor = data
-
+        input_tensor, target_tensor = data[0].to(device), data[1].to(device)
         encoder_optimizer.zero_grad()
         decoder_optimizer.zero_grad()
 
@@ -34,7 +33,7 @@ def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
 
 
 
-def train(train_dataloader, encoder, decoder, n_epochs=1, learning_rate=0.001,
+def train(train_dataloader, encoder, decoder, device, n_epochs=1, learning_rate=0.001,
                print_every=1, plot_every=1):
     encoder.train()
     decoder.train()
@@ -48,7 +47,7 @@ def train(train_dataloader, encoder, decoder, n_epochs=1, learning_rate=0.001,
     criterion = nn.NLLLoss()
 
     for epoch in range(1, n_epochs + 1):
-        loss = train_epoch(train_dataloader, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion)
+        loss = train_epoch(train_dataloader, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, device)
         print_loss_total += loss
         plot_loss_total += loss
 

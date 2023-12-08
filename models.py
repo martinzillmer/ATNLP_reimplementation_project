@@ -7,7 +7,12 @@ EOS_token = 1
 
 # Encoder
 class EncoderRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, dropout_p=0.1):
+    def __init__(self, input_size, hidden_size, dropout_p):
+        """
+        :param input_size: Size of input vocabulary
+        :param hidden_size: Size of hidden state
+        :param dropout_p: Dropout rate
+        """
         super(EncoderRNN, self).__init__()
         self.hidden_size = hidden_size
 
@@ -20,9 +25,15 @@ class EncoderRNN(nn.Module):
         output, hidden = self.gru(embedded)
         return output, hidden
 
-# Devoder
+# Decoder
 class DecoderRNN(nn.Module):
     def __init__(self, hidden_size, output_size, device, max_len):
+        """
+        :param hidden_size: Size of 
+        :output_size: Output vocabulary size
+        :param device: 'cpu' or 'gpu'
+        :param max_len: ???
+        """
         super(DecoderRNN, self).__init__()
         self.embedding = nn.Embedding(output_size, hidden_size)
         self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True)
