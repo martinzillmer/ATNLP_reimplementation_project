@@ -2,6 +2,7 @@ import time
 import torch
 import torch.nn as nn
 from torch import optim
+from tqdm import tqdm
 from utilities import timeSince, showPlot
 
 EOS_token = 1
@@ -10,12 +11,14 @@ def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
           decoder_optimizer, criterion, device):
 
     total_loss = 0
-    for data in dataloader:
+    for data in tqdm(dataloader):
         input_tensor, target_tensor = data[0].to(device), data[1].to(device)
         encoder_optimizer.zero_grad()
         decoder_optimizer.zero_grad()
 
         encoder_outputs, encoder_hidden = encoder(input_tensor)
+        #print(encoder_outputs.shape, total_loss)
+        #print(encoder_hidden.shape, total_loss)
         decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden, target_tensor)
 
         loss = criterion(

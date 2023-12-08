@@ -47,7 +47,7 @@ class DecoderRNN(nn.Module):
         decoder_hidden = encoder_hidden
         decoder_outputs = []
 
-        for i in range(self.max_len):
+        for i in range(target_tensor.size(1)):
             decoder_output, decoder_hidden  = self.forward_step(decoder_input, decoder_hidden)
             decoder_outputs.append(decoder_output)
 
