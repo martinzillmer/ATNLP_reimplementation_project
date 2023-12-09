@@ -1,11 +1,13 @@
 import time
 import torch
 import torch.nn as nn
+from torch.nn.utils import clip_grad_norm_
 from torch import optim
 from tqdm import tqdm
 from utilities import timeSince, showPlot
 
-EOS_token = 1
+EOS_token = 2
+max_gradient_norm = 5
 
 def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
           decoder_optimizer, criterion, device):
@@ -27,6 +29,10 @@ def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
         )
         loss.backward()
 
+        # Clip gradients
+        clip_grad_norm_(encoder.parameters(), max_gradient_norm)
+        clip_grad_norm_(decoder.parameters(), max_gradient_norm)
+
         encoder_optimizer.step()
         decoder_optimizer.step()
 
@@ -37,7 +43,7 @@ def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
 
 
 def train(train_dataloader, encoder, decoder, device, n_epochs=1, learning_rate=0.001,
-               print_every=1, plot_every=1):
+               print_every=1, plot_every=1, save_name=None):
     encoder.train()
     decoder.train()
     start = time.time()
@@ -64,26 +70,34 @@ def train(train_dataloader, encoder, decoder, device, n_epochs=1, learning_rate=
             plot_loss_avg = plot_loss_total / plot_every
             plot_losses.append(plot_loss_avg)
             plot_loss_total = 0
+    
+    if save_name:
+        torch.save(encoder.state_dict(), 'models/encoder_' + save_name + '.pth')
+        torch.save(decoder.state_dict(), 'models/decoder_' + save_name + '.pth')
 
     showPlot(plot_losses)
 
 
-def evaluate(encoder, decoder, sentence, input_lang, output_lang):
+def evaluate(encoder, decoder, dataloader, device):
+    """
+    Calculate exact match accuracy
+    """
     encoder.eval()
     decoder.eval()
+    correct_predictions = 0
+    total_predictions = 0
     with torch.no_grad():
-        input_tensor = tensorFromSentence(input_lang, sentence)
+        for data in tqdm(dataloader):
+            input_tensor, target_tensor = data[0].to(device), data[1].to(device) 
+            print(target_tensor)
+            encoder_outputs, encoder_hidden = encoder(input_tensor)
+            decoder_outputs, decoder_hidden, decoder_attn = decoder(encoder_outputs, encoder_hidden)
 
-        encoder_outputs, encoder_hidden = encoder(input_tensor)
-        decoder_outputs, decoder_hidden, decoder_attn = decoder(encoder_outputs, encoder_hidden)
+            _, topi = decoder_outputs.topk(1)
+            decoded_ids = topi.squeeze()
+            print(decoded_ids, "\n")
 
-        _, topi = decoder_outputs.topk(1)
-        decoded_ids = topi.squeeze()
+            correct_predictions += torch.sum(torch.all(decoded_ids == target_tensor, axis=1)).item()
+            total_predictions += input_tensor.size(0)
 
-        decoded_words = []
-        for idx in decoded_ids:
-            if idx.item() == EOS_token:
-                decoded_words.append('<EOS>')
-                break
-            decoded_words.append(output_lang.index2word[idx.item()])
-    return decoded_words, decoder_attn
+    return correct_predictions / total_predictions

@@ -7,36 +7,49 @@ EOS_token = 1
 
 # Encoder
 class EncoderRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, dropout_p):
+    def __init__(self, rnn, input_size, hidden_size, num_layers, dropout_p):
         """
         :param input_size: Size of input vocabulary
         :param hidden_size: Size of hidden state
+        :param num_layers: Number of layers in RNN
         :param dropout_p: Dropout rate
         """
         super(EncoderRNN, self).__init__()
+        assert rnn in ['gru', 'lstm'], "Unknown RNN"
         self.hidden_size = hidden_size
 
         self.embedding = nn.Embedding(input_size, hidden_size)
-        self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True)
+        
+        if rnn == 'gru':
+            self.rnn = nn.GRU(hidden_size, hidden_size, num_layers, batch_first=True)
+        elif rnn == 'lstm':
+            self.rnn = nn.LSTM(hidden_size, hidden_size, num_layers, batch_first=True)
+        
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, input):
         embedded = self.dropout(self.embedding(input))
-        output, hidden = self.gru(embedded)
+        output, hidden = self.rnn(embedded)
         return output, hidden
 
 # Decoder
 class DecoderRNN(nn.Module):
-    def __init__(self, hidden_size, output_size, device, max_len):
+    def __init__(self, rnn, hidden_size, output_size, num_layers, device, max_len):
         """
         :param hidden_size: Size of 
         :output_size: Output vocabulary size
+        :param num_layers: Number of layers in RNN
         :param device: 'cpu' or 'gpu'
         :param max_len: ???
         """
         super(DecoderRNN, self).__init__()
+        assert rnn in ['gru', 'lstm']
         self.embedding = nn.Embedding(output_size, hidden_size)
-        self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True)
+        
+        if rnn == 'gru':
+            self.rnn = nn.GRU(hidden_size, hidden_size, num_layers, batch_first=True)
+        elif rnn == 'lstm':
+            self.rnn = nn.LSTM(hidden_size, hidden_size, num_layers, batch_first=True)
         self.out = nn.Linear(hidden_size, output_size)
         self.device = device
         self.max_len = max_len
@@ -47,7 +60,7 @@ class DecoderRNN(nn.Module):
         decoder_hidden = encoder_hidden
         decoder_outputs = []
 
-        for i in range(target_tensor.size(1)):
+        for i in range(self.max_len):
             decoder_output, decoder_hidden  = self.forward_step(decoder_input, decoder_hidden)
             decoder_outputs.append(decoder_output)
 
@@ -66,7 +79,7 @@ class DecoderRNN(nn.Module):
     def forward_step(self, input, hidden):
         output = self.embedding(input)
         output = F.relu(output)
-        output, hidden = self.gru(output, hidden)
+        output, hidden = self.rnn(output, hidden)
         output = self.out(output)
         return output, hidden
     
@@ -87,11 +100,17 @@ class BahdanauAttention(nn.Module):
         return context, weights
 
 class AttnDecoderRNN(nn.Module):
-    def __init__(self, hidden_size, output_size, device, max_len, dropout_p=0.1):
+    def __init__(self, rnn, hidden_size, output_size, num_layers, device, max_len, dropout_p):
         super(AttnDecoderRNN, self).__init__()
+        assert rnn in ['gru', 'lstm'], "Unknown RNN"
         self.embedding = nn.Embedding(output_size, hidden_size)
         self.attention = BahdanauAttention(hidden_size)
-        self.gru = nn.GRU(2 * hidden_size, hidden_size, batch_first=True)
+        
+        if rnn == 'gru':
+            self.rnn = nn.GRU(2 * hidden_size, hidden_size, num_layers, batch_first=True)
+        elif rnn == 'lstm':
+            self.rnn = nn.LSTM(2 * hidden_size, hidden_size, num_layers, batch_first=True)
+        
         self.out = nn.Linear(hidden_size, output_size)
         self.dropout = nn.Dropout(dropout_p)
         self.device = device
@@ -133,7 +152,7 @@ class AttnDecoderRNN(nn.Module):
         context, attn_weights = self.attention(query, encoder_outputs)
         input_gru = torch.cat((embedded, context), dim=2)
 
-        output, hidden = self.gru(input_gru, hidden)
+        output, hidden = self.rnn(input_gru, hidden)
         output = self.out(output)
 
         return output, hidden, attn_weights
