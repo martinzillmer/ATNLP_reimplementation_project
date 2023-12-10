@@ -9,11 +9,12 @@ from utilities import timeSince, showPlot
 EOS_token = 2
 max_gradient_norm = 5
 
+
 def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
           decoder_optimizer, criterion, device):
 
     total_loss = 0
-    for i, data in tqdm(enumerate(dataloader)):
+    for i, data in enumerate(dataloader):
         input_tensor, target_tensor = data[0].to(device), data[1].to(device)
 
         encoder_optimizer.zero_grad()
