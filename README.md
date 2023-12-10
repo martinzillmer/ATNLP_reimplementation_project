@@ -13,3 +13,4 @@ Requirements:
 - numpy 1.26.2
 - pandas 2.1.1
 - matplotlib 3.8.0
+- scipy 1.11.4
