@@ -13,15 +13,19 @@ def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
           decoder_optimizer, criterion, device):
 
     total_loss = 0
-    for data in tqdm(dataloader):
+    for i, data in tqdm(enumerate(dataloader)):
         input_tensor, target_tensor = data[0].to(device), data[1].to(device)
+
         encoder_optimizer.zero_grad()
         decoder_optimizer.zero_grad()
 
         encoder_outputs, encoder_hidden = encoder(input_tensor)
-        #print(encoder_outputs.shape, total_loss)
-        #print(encoder_hidden.shape, total_loss)
-        decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden, target_tensor)
+
+        if i % 2 == 1:
+            target_tensor_decoder = None
+        else:
+            target_tensor_decoder = target_tensor
+        decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden, target_tensor_decoder)
 
         loss = criterion(
             decoder_outputs.view(-1, decoder_outputs.size(-1)),
@@ -89,13 +93,13 @@ def evaluate(encoder, decoder, dataloader, device):
     with torch.no_grad():
         for data in tqdm(dataloader):
             input_tensor, target_tensor = data[0].to(device), data[1].to(device) 
-            print(target_tensor)
+            #print(target_tensor)
             encoder_outputs, encoder_hidden = encoder(input_tensor)
             decoder_outputs, decoder_hidden, decoder_attn = decoder(encoder_outputs, encoder_hidden)
 
             _, topi = decoder_outputs.topk(1)
             decoded_ids = topi.squeeze()
-            print(decoded_ids, "\n")
+            #print(decoded_ids, "\n")
 
             correct_predictions += torch.sum(torch.all(decoded_ids == target_tensor, axis=1)).item()
             total_predictions += input_tensor.size(0)
