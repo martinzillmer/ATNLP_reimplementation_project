@@ -15,7 +15,7 @@ def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
 
     total_loss = 0
     half = len(dataloader) // 2
-    for i, data in enumerate(dataloader):
+    for i, data in tqdm(enumerate(dataloader)):
         input_tensor, target_tensor = data[0].to(device), data[1].to(device)
 
         encoder_optimizer.zero_grad()

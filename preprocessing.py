@@ -59,7 +59,6 @@ def build_vocab(column):
 
 def get_dataframes(train_url, test_url):
     names = ["IN","OUT"]
-    print("Loading data...")
     train_df = pd.read_csv(train_url,
                        sep="OUT:",
                        names=names,
@@ -96,7 +95,6 @@ def get_dataframes(train_url, test_url):
     def pad_out(row):
         return torch.cat([row, torch.zeros(max_len_out - len(row))]).to(torch.long)
     
-    print("Padding OUT_idx column...")
     train_df['OUT_idx'] = train_df['OUT_idx'].apply(pad_out)
     test_df['OUT_idx'] = test_df['OUT_idx'].apply(pad_out)   
 
