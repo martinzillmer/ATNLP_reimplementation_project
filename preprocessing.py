@@ -1,6 +1,9 @@
 import torch
 import pandas as pd
+import torchtext.vocab as ttv
+from collections import Counter
 
+"""
 class Vocab:
     def __init__(self, name):
         self.name = name
@@ -28,7 +31,7 @@ class Vocab:
     def col2idx(self, series, col):
         x = [self.word2index[word] for word in series[col]]
         return torch.tensor(x)
-    
+ 
 def get_vocab(series, name):
     voc = Vocab(name)
     voc.addWord('<pad>')
@@ -37,6 +40,7 @@ def get_vocab(series, name):
     series.apply(voc.addSentence)
     return voc
 
+
 def pre_process(row):
     # Remove 'IN:' word in IN column, and split into tokens
     IN = row.iloc[0].split()[1:] + ['<eos>']
@@ -44,10 +48,18 @@ def pre_process(row):
     # Split into tokens ('OUT:' is already removed)
     OUT = row.iloc[1].split() + ['<eos>']
     return IN, OUT
+"""
 
+def build_vocab(column):
+    tokens = [token for seq in column for token in seq]
+    #tokens = [token for seq in column for token in str(seq).split()]
+    counter = Counter(tokens)
+    vocab = ttv.vocab(counter, specials=['<pad>', '<sos>', '<eos>'])
+    return vocab
 
 def get_dataframes(train_url, test_url):
     names = ["IN","OUT"]
+    print("Loading data...")
     train_df = pd.read_csv(train_url,
                        sep="OUT:",
                        names=names,
@@ -57,28 +69,38 @@ def get_dataframes(train_url, test_url):
                         sep="OUT:",
                         names=names,
                         engine='python')
-
-    train_df[names] = train_df.apply(pre_process, axis=1, result_type='expand')
-    test_df[names] = test_df.apply(pre_process, axis=1, result_type='expand')
     
-    # Get max length 
-    train_max_len_in = max(train_df.IN.apply(len))
-    train_max_len_out = max(train_df.OUT.apply(len))
-    test_max_len_in = max(test_df.IN.apply(len))
-    test_max_len_out = max(test_df.OUT.apply(len))
+    def splitter(row):
+        """Split text and add <eos> token"""
+        return row.IN.split()[1:] + ['<eos>'], row.OUT.split() + ['<eos>']
 
-    max_len_in = max(train_max_len_in, test_max_len_in)
+    train_df[['IN', 'OUT']] = train_df[['IN', 'OUT']].apply(splitter, result_type='expand', axis=1)
+    test_df[['IN', 'OUT']] = test_df[['IN', 'OUT']].apply(splitter, result_type='expand', axis=1)
+    
+    voc_in = build_vocab(train_df['IN'])
+    voc_out = build_vocab(train_df['OUT'])
+    
+    def text_to_tensor(row):
+         """Convert tokens into indexes from their respective vocabulary"""
+         x = torch.tensor(voc_in.lookup_indices(row.IN), dtype=torch.int)
+         y = torch.tensor(voc_out.lookup_indices(row.OUT), dtype=torch.int)
+         return x, y 
+    
+    train_df[['IN_idx','OUT_idx']] = train_df[['IN','OUT']].apply(text_to_tensor, result_type='expand', axis=1) 
+    test_df[['IN_idx','OUT_idx']] = test_df[['IN','OUT']].apply(text_to_tensor, result_type='expand', axis=1)
+    
+    train_max_len_out = max(train_df.OUT_idx.apply(len))
+    test_max_len_out = max(test_df.OUT_idx.apply(len))
     max_len_out = max(train_max_len_out, test_max_len_out)
 
-    def pad_dataframe(row):
-        in_res = row.IN + ['<pad>'] * (max_len_in - len(row.IN))
-        out_res = row.OUT + ['<pad>'] * (max_len_out - len(row.OUT))
-        return in_res, out_res
+    def pad_out(row):
+        return torch.cat([row, torch.zeros(max_len_out - len(row))]).to(torch.long)
     
-    train_df[names] = train_df.apply(pad_dataframe, axis=1, result_type='expand')
-    test_df[names] = test_df.apply(pad_dataframe, axis=1, result_type='expand')   
+    print("Padding OUT_idx column...")
+    train_df['OUT_idx'] = train_df['OUT_idx'].apply(pad_out)
+    test_df['OUT_idx'] = test_df['OUT_idx'].apply(pad_out)   
 
-    return train_df, test_df
+    return train_df, test_df, voc_in, voc_out
 
 
 

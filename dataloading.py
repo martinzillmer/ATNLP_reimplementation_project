@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
-from torch.utils.data import Dataset
+import torch
+from torch.utils.data import Dataset, DataLoader
+#from torch.nn.utils.rnn import pad_sequence
 
 class Text_dataset(Dataset):
     def __init__(self,
@@ -27,4 +29,20 @@ class Text_dataset(Dataset):
     def __getitem__(self, idx):
         x, y = self.df.iloc[idx]
         return x, y
+
+# Needed if we want to do batch training
+"""
+def custom_collate(input_data):
+    xs, lens, ys = list(zip(*input_data))
+    max_length = max(lens)
+    xs = torch.stack([torch.cat([x, torch.zeros(max_length-x.size(0))]) for x in xs]).to(torch.int)
+    lens = torch.tensor(lens)
+    ys = torch.stack(ys)
+    return xs, lens, ys
+"""
+
+def get_dataloaders(training_data, test_data):
+  train_dataloader = DataLoader(training_data, batch_size=1, shuffle=False)
+  test_dataloader = DataLoader(test_data, batch_size=1, shuffle=False)
+  return train_dataloader, test_dataloader
 

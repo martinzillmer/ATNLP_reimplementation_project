@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
-SOS_token = 0
-EOS_token = 1
+SOS_token = 1
+EOS_token = 2
 
 # Encoder
 class EncoderRNN(nn.Module):
@@ -17,7 +18,7 @@ class EncoderRNN(nn.Module):
         super(EncoderRNN, self).__init__()
         assert rnn in ['gru', 'lstm'], "Unknown RNN"
         self.hidden_size = hidden_size
-
+        
         self.embedding = nn.Embedding(input_size, hidden_size)
         
         if rnn == 'gru':
@@ -29,8 +30,8 @@ class EncoderRNN(nn.Module):
 
     def forward(self, input):
         embedded = self.dropout(self.embedding(input))
-        output, hidden = self.rnn(embedded)
-        return output, hidden
+        rnn_out, hidden = self.rnn(embedded)
+        return rnn_out, hidden
 
 # Decoder
 class DecoderRNN(nn.Module):
