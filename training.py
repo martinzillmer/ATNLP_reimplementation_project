@@ -14,15 +14,16 @@ def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
           decoder_optimizer, criterion, device):
 
     total_loss = 0
+    half = len(dataloader) // 2
     for i, data in enumerate(dataloader):
         input_tensor, target_tensor = data[0].to(device), data[1].to(device)
 
         encoder_optimizer.zero_grad()
         decoder_optimizer.zero_grad()
 
-        encoder_outputs, encoder_hidden = encoder(input_tensor)
+        encoder_outputs, encoder_hidden, = encoder(input_tensor)
 
-        if i % 2 == 1:
+        if i > half:
             target_tensor_decoder = None
         else:
             target_tensor_decoder = target_tensor
