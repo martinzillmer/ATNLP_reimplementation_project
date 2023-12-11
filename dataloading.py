@@ -41,8 +41,8 @@ def custom_collate(input_data):
     return xs, lens, ys
 """
 
-def get_dataloaders(training_data, test_data):
-  train_dataloader = DataLoader(training_data, batch_size=1, shuffle=False)
-  test_dataloader = DataLoader(test_data, batch_size=1, shuffle=False)
+def get_dataloaders(training_data, test_data, num_workers=0):
+  train_dataloader = DataLoader(training_data, batch_size=1, shuffle=False, num_workers=num_workers, persistent_workers=True, pin_memory=True)
+  test_dataloader = DataLoader(test_data, batch_size=1, shuffle=False, num_workers=num_workers, persistent_workers=True)
   return train_dataloader, test_dataloader
 

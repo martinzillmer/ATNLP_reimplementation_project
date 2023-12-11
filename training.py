@@ -9,7 +9,6 @@ from utilities import timeSince, showPlot
 EOS_token = 2
 max_gradient_norm = 5
 
-
 def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
           decoder_optimizer, criterion, device):
 

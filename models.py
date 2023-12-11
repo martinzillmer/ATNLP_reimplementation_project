@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
+from torch.optim import Adam
+from torchmetrics import Accuracy
+import lightning as L
 
 SOS_token = 1
 EOS_token = 2
@@ -157,3 +159,26 @@ class AttnDecoderRNN(nn.Module):
         output = self.out(output)
 
         return output, hidden, attn_weights
+    
+class Seq2SeqModel(L.LightningModule):
+    def __init__(self, encoder, decoder, load_len):
+        super(Seq2SeqModel, self).__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self.load_len = load_len // 2
+        #self.accuracy = Accuracy()
+        self.criterion = nn.NLLLoss()
+
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+
+        teacher_force = None if batch_idx > self.load_len else y
+        c, h = self.encoder(x)
+        y_hat, _, _ = self.decoder(c, h, teacher_force)
+        #loss = self.criterion(y_hat, y)
+        loss = self.criterion(y_hat.view(-1, y_hat.size(-1)), y.view(-1))
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
+
+    def configure_optimizers(self):
+        return Adam(self.parameters(), lr=0.001)
