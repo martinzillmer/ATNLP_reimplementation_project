@@ -75,28 +75,28 @@ def get_dataframes(train_url, test_url):
 
     train_df[['IN', 'OUT']] = train_df[['IN', 'OUT']].apply(splitter, result_type='expand', axis=1)
     test_df[['IN', 'OUT']] = test_df[['IN', 'OUT']].apply(splitter, result_type='expand', axis=1)
+    train_df['lens'] = train_df.OUT.apply(len)
+    test_df['lens'] = test_df.OUT.apply(len)
     
     voc_in = build_vocab(train_df['IN'])
     voc_out = build_vocab(train_df['OUT'])
     
     def text_to_tensor(row):
          """Convert tokens into indexes from their respective vocabulary"""
-         x = torch.tensor(voc_in.lookup_indices(row.IN), dtype=torch.int)
-         y = torch.tensor(voc_out.lookup_indices(row.OUT), dtype=torch.int)
+         x = torch.tensor(voc_in.lookup_indices(row.IN), dtype=torch.long)
+         y = torch.tensor(voc_out.lookup_indices(row.OUT), dtype=torch.long)
          return x, y 
     
     train_df[['IN_idx','OUT_idx']] = train_df[['IN','OUT']].apply(text_to_tensor, result_type='expand', axis=1) 
     test_df[['IN_idx','OUT_idx']] = test_df[['IN','OUT']].apply(text_to_tensor, result_type='expand', axis=1)
     
-    train_max_len_out = max(train_df.OUT_idx.apply(len))
-    test_max_len_out = max(test_df.OUT_idx.apply(len))
-    max_len_out = max(train_max_len_out, test_max_len_out)
+    max_len_out = max(max(test_df.lens), max(train_df.lens))
 
-    def pad_out(row):
-        return torch.cat([row, torch.zeros(max_len_out - len(row))]).to(torch.long)
+    #def pad_out(row):
+    #    return torch.cat([row, torch.zeros(max_len_out - len(row))]).to(torch.long)
     
-    train_df['OUT_idx'] = train_df['OUT_idx'].apply(pad_out)
-    test_df['OUT_idx'] = test_df['OUT_idx'].apply(pad_out)   
+    #train_df['OUT_idx'] = train_df['OUT_idx'].apply(pad_out)
+    #test_df['OUT_idx'] = test_df['OUT_idx'].apply(pad_out)   
 
     return train_df, test_df, voc_in, voc_out
 

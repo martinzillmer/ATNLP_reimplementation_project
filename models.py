@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import Adam
 from torchmetrics import Accuracy
-import lightning as L
+import pytorch_lightning as pl
 
 SOS_token = 1
 EOS_token = 2
@@ -57,23 +57,38 @@ class DecoderRNN(nn.Module):
         self.device = device
         self.max_len = max_len
 
-    def forward(self, encoder_outputs, encoder_hidden, target_tensor=None):
+    def forward(self, encoder_outputs, encoder_hidden, lens=None, target_tensor=None, oracle=False):
         batch_size = encoder_outputs.size(0)
         decoder_input = torch.empty(batch_size, 1, dtype=torch.long, device=self.device).fill_(SOS_token)
         decoder_hidden = encoder_hidden
         decoder_outputs = []
 
-        for i in range(self.max_len):
+        iterations = lens if lens is not None else self.max_len
+        for i in range(iterations):
+            # Compute output
             decoder_output, decoder_hidden  = self.forward_step(decoder_input, decoder_hidden)
             decoder_outputs.append(decoder_output)
-
+            
+            # Get input
             if target_tensor is not None:
                 # Teacher forcing: Feed the target as the next input
                 decoder_input = target_tensor[:, i].unsqueeze(1) # Teacher forcing
-            else:
                 # Without teacher forcing: use its own predictions as the next input
+            elif not oracle:
+                # No teacher forcing, no oracle
                 _, topi = decoder_output.topk(1)
-                decoder_input = topi.squeeze(-1).detach()  # detach from history as input
+                if topi == EOS_token:
+                    break
+                decoder_input = topi.squeeze(-1).detach()  # detach from history as input   
+            elif oracle and iterations-1 == i:
+                # Last iteration in oracle
+                decoder_input == torch.tensor(EOS_token)
+            else:
+                # Oracle (Never teacher force and oracle at the same time)
+                _, topi = decoder_output.topk(2)
+                topi = topi[0] if topi[0] != EOS_token else topi[1]
+                decoder_input = topi.squeeze(-1).detach()
+
 
         decoder_outputs = torch.cat(decoder_outputs, dim=1)
         decoder_outputs = F.log_softmax(decoder_outputs, dim=-1)
@@ -103,11 +118,12 @@ class BahdanauAttention(nn.Module):
         return context, weights
 
 class AttnDecoderRNN(nn.Module):
-    def __init__(self, rnn, hidden_size, output_size, num_layers, device, max_len, dropout_p):
+    def __init__(self, rnn, hidden_size, output_size, num_layers, device, dropout_p, max_len):
         super(AttnDecoderRNN, self).__init__()
         assert rnn in ['gru', 'lstm'], "Unknown RNN"
         self.embedding = nn.Embedding(output_size, hidden_size)
         self.attention = BahdanauAttention(hidden_size)
+        self.max_len = max_len
         
         if rnn == 'gru':
             self.rnn = nn.GRU(2 * hidden_size, hidden_size, num_layers, batch_first=True)
@@ -117,29 +133,43 @@ class AttnDecoderRNN(nn.Module):
         self.out = nn.Linear(hidden_size, output_size)
         self.dropout = nn.Dropout(dropout_p)
         self.device = device
-        self.max_len = max_len
 
-    def forward(self, encoder_outputs, encoder_hidden, target_tensor=None):
+    def forward(self, encoder_outputs, encoder_hidden, lens=None, target_tensor=None, oracle=False):
         batch_size = encoder_outputs.size(0)
+
+        # First input
         decoder_input = torch.empty(batch_size, 1, dtype=torch.long, device=self.device).fill_(SOS_token)
         decoder_hidden = encoder_hidden
         decoder_outputs = []
         attentions = []
-
-        for i in range(self.max_len):
+        
+        iterations = lens if lens is not None else self.max_len
+        for i in range(iterations):
+            # Compute output
             decoder_output, decoder_hidden, attn_weights = self.forward_step(
                 decoder_input, decoder_hidden, encoder_outputs
             )
             decoder_outputs.append(decoder_output)
             attentions.append(attn_weights)
 
+            # Get next input
             if target_tensor is not None:
                 # Teacher forcing: Feed the target as the next input
-                decoder_input = target_tensor[:, i].unsqueeze(1) # Teacher forcing
-            else:
-                # Without teacher forcing: use its own predictions as the next input
+                decoder_input = target_tensor[:, i].unsqueeze(1) # Teacher forcing                  
+            elif not oracle:
+                # No teacher forcing, no oracle
                 _, topi = decoder_output.topk(1)
+                if topi == EOS_token:
+                    break # Break if we produce <eos> token
                 decoder_input = topi.squeeze(-1).detach()  # detach from history as input
+            elif oracle and i == iterations-1:
+                # Last iteration with oracle
+                decoder_input == torch.tensor(EOS_token)
+            else:
+                # Oracle
+                _, topi = decoder_output.topk(2)
+                topi = topi[0] if topi[0] != EOS_token else topi[1]
+                decoder_input = topi.squeeze(-1).detach()                   
 
         decoder_outputs = torch.cat(decoder_outputs, dim=1)
         decoder_outputs = F.log_softmax(decoder_outputs, dim=-1)
@@ -153,14 +183,14 @@ class AttnDecoderRNN(nn.Module):
 
         query = hidden.permute(1, 0, 2)
         context, attn_weights = self.attention(query, encoder_outputs)
-        input_gru = torch.cat((embedded, context), dim=2)
+        input_rnn = torch.cat((embedded, context), dim=2)
 
-        output, hidden = self.rnn(input_gru, hidden)
+        output, hidden = self.rnn(input_rnn, hidden)
         output = self.out(output)
 
         return output, hidden, attn_weights
     
-class Seq2SeqModel(L.LightningModule):
+class Seq2SeqModel(pl.LightningModule):
     def __init__(self, encoder, decoder, load_len):
         super(Seq2SeqModel, self).__init__()
         self.encoder = encoder

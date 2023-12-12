@@ -27,8 +27,8 @@ class Text_dataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx):
-        x, y = self.df.iloc[idx]
-        return x, y
+        x, y, len = self.df.iloc[idx]
+        return x, y, len
 
 # Needed if we want to do batch training
 """
@@ -41,8 +41,18 @@ def custom_collate(input_data):
     return xs, lens, ys
 """
 
-def get_dataloaders(training_data, test_data, num_workers=0):
-  train_dataloader = DataLoader(training_data, batch_size=1, shuffle=False, num_workers=num_workers, persistent_workers=True, pin_memory=True)
-  test_dataloader = DataLoader(test_data, batch_size=1, shuffle=False, num_workers=num_workers, persistent_workers=True)
+def get_dataloaders(training_data, test_data, num_workers=0, persistent_workers=False, pin_memory=False):
+  train_dataloader = DataLoader(training_data, 
+                                batch_size=1, 
+                                shuffle=False, 
+                                num_workers=num_workers, 
+                                persistent_workers=persistent_workers, 
+                                pin_memory=pin_memory)
+  test_dataloader = DataLoader(test_data, 
+                               batch_size=1, 
+                               shuffle=False, 
+                               num_workers=num_workers, 
+                               persistent_workers=persistent_workers,
+                               pin_memory=pin_memory)
   return train_dataloader, test_dataloader
 

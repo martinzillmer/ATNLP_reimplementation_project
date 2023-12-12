@@ -5,9 +5,11 @@ from torch.nn.utils import clip_grad_norm_
 from torch import optim
 from tqdm import tqdm
 from utilities import timeSince, showPlot
+import pytorch_lightning as pl
 
 EOS_token = 2
 max_gradient_norm = 5
+
 
 def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
           decoder_optimizer, criterion, device):
@@ -15,18 +17,30 @@ def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
     total_loss = 0
     half = len(dataloader) // 2
     for i, data in tqdm(enumerate(dataloader)):
-        input_tensor, target_tensor = data[0].to(device), data[1].to(device)
+        input_tensor, target_tensor, lens = data[0].to(device), data[1].to(device), data[2]
 
         encoder_optimizer.zero_grad()
         decoder_optimizer.zero_grad()
 
         encoder_outputs, encoder_hidden, = encoder(input_tensor)
 
-        if i > half:
-            target_tensor_decoder = None
+        if i > half: 
+            # Done use teacher forcing in the second half
+            decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden)
+            output_seq_len = decoder_outputs.size(1)
+            
+            if output_seq_len < lens:
+                # Pad output seq
+                decoder_outputs = torch.cat([decoder_outputs, torch.zeros(lens-output_seq_len)], dim=1)
+            else:
+                # Trim output seq
+                decoder_outputs = decoder_outputs[:,:lens,:]
         else:
-            target_tensor_decoder = target_tensor
-        decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden, target_tensor_decoder)
+            # Teacher forcing
+            decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden, lens, target_tensor)
+            decoder_outputs = torch.cat([decoder_outputs, torch.zeros(lens-decoder_outputs.size(1))], dim=1)
+
+        # pad output sequence to be same length as target
 
         loss = criterion(
             decoder_outputs.view(-1, decoder_outputs.size(-1)),
@@ -58,7 +72,7 @@ def train(train_dataloader, encoder, decoder, device, n_epochs=1, learning_rate=
 
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
     decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate)
-    criterion = nn.NLLLoss()
+    criterion = nn.NLLLoss(ignore_index=0) # ignore <pad>
 
     for epoch in range(1, n_epochs + 1):
         loss = train_epoch(train_dataloader, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, device)
@@ -83,7 +97,7 @@ def train(train_dataloader, encoder, decoder, device, n_epochs=1, learning_rate=
     showPlot(plot_losses)
 
 
-def evaluate(encoder, decoder, dataloader, device):
+def evaluate(encoder, decoder, dataloader, device, oracle=False):
     """
     Calculate exact match accuracy
     """
@@ -93,10 +107,11 @@ def evaluate(encoder, decoder, dataloader, device):
     total_predictions = 0
     with torch.no_grad():
         for data in tqdm(dataloader):
-            input_tensor, target_tensor = data[0].to(device), data[1].to(device) 
-            #print(target_tensor)
+            input_tensor, target_tensor, lens = data[0].to(device), data[1].to(device), data[2]
+            
             encoder_outputs, encoder_hidden = encoder(input_tensor)
-            decoder_outputs, decoder_hidden, decoder_attn = decoder(encoder_outputs, encoder_hidden)
+
+            decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden, lens, oracle)
 
             _, topi = decoder_outputs.topk(1)
             decoded_ids = topi.squeeze()
