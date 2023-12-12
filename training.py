@@ -12,7 +12,7 @@ max_gradient_norm = 5
 
 
 def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
-          decoder_optimizer, criterion, device):
+          decoder_optimizer, criterion, device, out_dim):
 
     total_loss = 0
     half = len(dataloader) // 2
@@ -31,7 +31,7 @@ def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
             
             if output_seq_len < lens:
                 # Pad output seq
-                decoder_outputs = torch.cat([decoder_outputs, torch.zeros(lens-output_seq_len)], dim=1)
+                decoder_outputs = torch.cat([decoder_outputs, torch.zeros(1,lens-output_seq_len,out_dim)], dim=1)
             else:
                 # Trim output seq
                 decoder_outputs = decoder_outputs[:,:lens,:]
@@ -61,7 +61,7 @@ def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
 
 
 
-def train(train_dataloader, encoder, decoder, device, n_epochs=1, learning_rate=0.001,
+def train(train_dataloader, encoder, decoder, device, out_dim, n_epochs=1, learning_rate=0.001,
                print_every=1, plot_every=1, save_name=None):
     encoder.train()
     decoder.train()
@@ -75,7 +75,7 @@ def train(train_dataloader, encoder, decoder, device, n_epochs=1, learning_rate=
     criterion = nn.NLLLoss(ignore_index=0) # ignore <pad>
 
     for epoch in range(1, n_epochs + 1):
-        loss = train_epoch(train_dataloader, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, device)
+        loss = train_epoch(train_dataloader, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, device, out_dim)
         print_loss_total += loss
         plot_loss_total += loss
 
@@ -107,17 +107,22 @@ def evaluate(encoder, decoder, dataloader, device, oracle=False):
     total_predictions = 0
     with torch.no_grad():
         for data in tqdm(dataloader):
-            input_tensor, target_tensor, lens = data[0].to(device), data[1].to(device), data[2]
+            input_tensor, target_tensor = data[0].to(device), data[1].to(device)
             
             encoder_outputs, encoder_hidden = encoder(input_tensor)
-
-            decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden, lens, oracle)
-
-            _, topi = decoder_outputs.topk(1)
-            decoded_ids = topi.squeeze()
-            #print(decoded_ids, "\n")
-
-            correct_predictions += torch.sum(torch.all(decoded_ids == target_tensor, axis=1)).item()
+            
+            if oracle:
+                lens = data[2]
+                decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden, lens=lens, oracle=oracle)
+            else:
+                decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden)
+            
+            if decoder_outputs.size(1) == lens:
+                # Incorrect length -> Not exact match
+                _, topi = decoder_outputs.topk(1)
+                decoded_ids = topi.squeeze()
+                #print(decoded_ids, "\n")
+                correct_predictions += torch.sum(torch.all(decoded_ids == target_tensor, axis=1)).item()
             total_predictions += input_tensor.size(0)
 
     return correct_predictions / total_predictions

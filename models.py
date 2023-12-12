@@ -60,6 +60,7 @@ class DecoderRNN(nn.Module):
     def forward(self, encoder_outputs, encoder_hidden, lens=None, target_tensor=None, oracle=False):
         batch_size = encoder_outputs.size(0)
         decoder_input = torch.empty(batch_size, 1, dtype=torch.long, device=self.device).fill_(SOS_token)
+        
         decoder_hidden = encoder_hidden
         decoder_outputs = []
 
@@ -81,13 +82,13 @@ class DecoderRNN(nn.Module):
                     break
                 decoder_input = topi.squeeze(-1).detach()  # detach from history as input   
             elif oracle and iterations-1 == i:
-                # Last iteration in oracle
-                decoder_input == torch.tensor(EOS_token)
+                # Last iteration in oracle - not useful?
+                decoder_input == torch.empty(batch_size, 1, dtype=torch.long, device=self.device).fill_(SOS_token)
             else:
                 # Oracle (Never teacher force and oracle at the same time)
                 _, topi = decoder_output.topk(2)
-                topi = topi[0] if topi[0] != EOS_token else topi[1]
-                decoder_input = topi.squeeze(-1).detach()
+                topi = topi[:,:,0] if topi[0,0,0] != EOS_token else topi[:,:,1]
+                decoder_input = topi.detach() # .squeeze(-1)
 
 
         decoder_outputs = torch.cat(decoder_outputs, dim=1)
@@ -168,8 +169,8 @@ class AttnDecoderRNN(nn.Module):
             else:
                 # Oracle
                 _, topi = decoder_output.topk(2)
-                topi = topi[0] if topi[0] != EOS_token else topi[1]
-                decoder_input = topi.squeeze(-1).detach()                   
+                topi = topi[:,:,0] if topi[0,0,0] != EOS_token else topi[:,:,1]
+                decoder_input = topi.detach()                   
 
         decoder_outputs = torch.cat(decoder_outputs, dim=1)
         decoder_outputs = F.log_softmax(decoder_outputs, dim=-1)
